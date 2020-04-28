@@ -121,6 +121,11 @@ namespace EasyModbus
             Console.WriteLine();
 #endif
         }
+
+        public SerialPort GetSerialPort()
+        {
+            return this.serialport;
+        }
 		
 		/// <summary>
 		/// Establish connection to Master device in case of Modbus TCP. Opens COM-Port in case of Modbus RTU
