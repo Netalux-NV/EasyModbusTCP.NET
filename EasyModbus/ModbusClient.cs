@@ -23,6 +23,7 @@ using System.IO.Ports;
 using System.Reflection;
 using System.Text;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace EasyModbus
 {
@@ -31,6 +32,8 @@ namespace EasyModbus
 	/// </summary>
 	public partial class ModbusClient
 	{
+        private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+
         public enum RegisterOrder { LowHigh = 0, HighLow = 1 };
         private bool debug=false;
 		private TcpClient tcpClient;
@@ -48,14 +51,14 @@ namespace EasyModbus
         private bool udpFlag = false;
         private int portOut;
         private int baudRate = 9600;
-        private int connectTimeout = 1000;
+        private int connectTimeout = 20; //100; //PCO 21/8/2020 original = 1000 
         public byte[] receiveData;
         public byte[] sendData; 
         private SerialPort serialport;
         private Parity parity = Parity.Even;
         private StopBits stopBits = StopBits.One;
         private bool connected = false;
-        public int NumberOfRetries { get; set; } = 3;
+        public int NumberOfRetries { get; set; } = 10; //40; //8; //PCO 21/8/2020 original = 3
         private int countRetries = 0;
 
         public delegate void ReceiveDataChangedHandler(object sender);
@@ -103,9 +106,11 @@ namespace EasyModbus
             serialport.BaudRate = baudRate;
             serialport.Parity = parity;
             serialport.StopBits = stopBits;
-            serialport.WriteTimeout = 10000;
+            serialport.WriteTimeout = connectTimeout; // 500; // 10000;
             serialport.ReadTimeout = connectTimeout;
-           
+            serialport.Handshake = Handshake.None;
+            serialport.DtrEnable = false;
+
             serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);      
         }
 
@@ -140,8 +145,10 @@ namespace EasyModbus
                     serialport.BaudRate = baudRate;
                     serialport.Parity = parity;
                     serialport.StopBits = stopBits;
-                    serialport.WriteTimeout = 10000;
+                    serialport.WriteTimeout = connectTimeout; // 500; // 10000;
                     serialport.ReadTimeout = connectTimeout;
+                    serialport.Handshake = Handshake.None;
+                    serialport.DtrEnable = false;
                     serialport.Open();
                     connected = true;
                     
@@ -768,14 +775,16 @@ namespace EasyModbus
                         SerialDataReceivedEventArgs e)
         {
             serialport.DataReceived -= DataReceivedHandler;
+            //log.Debug($"DataReceivedHandler: 'serialport.DataReceived' callback is removed (-=) ");
+            //log.Debug($"DataReceivedHandler: bytesToRead={bytesToRead.ToString()} ");
 
             //while (receiveActive | dataReceived)
-        	//	System.Threading.Thread.Sleep(10);
-        	receiveActive = true;
+            //	System.Threading.Thread.Sleep(10);
+            receiveActive = true;
         	
         	const long ticksWait = TimeSpan.TicksPerMillisecond * 2000;//((40*10000000) / this.baudRate);
-        	
-        	
+
+
         	SerialPort sp = (SerialPort)sender;
             if (bytesToRead == 0)
             {
@@ -788,37 +797,46 @@ namespace EasyModbus
         	int numbytes=0;
             int actualPositionToRead = 0;
             DateTime dateTimeLastRead = DateTime.Now;
-            do{
-            	try {
-            		dateTimeLastRead = DateTime.Now;  
-            		while ((sp.BytesToRead) == 0) 
-            		{
-            			System.Threading.Thread.Sleep(10);
-            			if  ((DateTime.Now.Ticks - dateTimeLastRead.Ticks) > ticksWait) 
-            				break;
-            		}
-            		numbytes=sp.BytesToRead;
-            		
-            	
-            	byte[] rxbytearray = new byte[numbytes];
-            	sp.Read(rxbytearray, 0, numbytes);
-                Array.Copy(rxbytearray,0, readBuffer,actualPositionToRead, (actualPositionToRead + rxbytearray.Length) <= bytesToRead ? rxbytearray.Length : bytesToRead - actualPositionToRead); 
-            	
-            	actualPositionToRead = actualPositionToRead + rxbytearray.Length;
-            	
-            	}
-            	catch (Exception){
-            	
-            	}
+            do
+            {
+            	try 
+                {
+                    //log.Debug($"DataReceivedHandler: wait until bytesToRead={bytesToRead.ToString()} are received");
+                    dateTimeLastRead = DateTime.Now;
+
+                    //while ((sp.BytesToRead) == 0)
+                    while ((sp.BytesToRead) < bytesToRead)
+                    {
+                        //log.Debug($"SerialPort->BytesToRead={sp.BytesToRead.ToString()}");
+                        //System.Threading.Thread.Sleep(10);
+                        System.Threading.Thread.Sleep(5);
+                        if ((DateTime.Now.Ticks - dateTimeLastRead.Ticks) > ticksWait)
+                            break;
+                    }
+                    //log.Debug($"SerialPort->BytesToRead={sp.BytesToRead.ToString()}");
+                    //log.Debug($"BytesToRead-> start copying ...");
+                    numbytes = sp.BytesToRead;
+
+                    byte[] rxbytearray = new byte[numbytes];
+                    sp.Read(rxbytearray, 0, numbytes);
+                    Array.Copy(rxbytearray,0, readBuffer,actualPositionToRead, (actualPositionToRead + rxbytearray.Length) <= bytesToRead ? rxbytearray.Length : bytesToRead - actualPositionToRead);
+                    //log.Debug($"BytesToRead-> copied to buffer");
+
+                    actualPositionToRead = actualPositionToRead + rxbytearray.Length;
+
+                }
+                catch (Exception){
+
+                }
 
                 if (bytesToRead <= actualPositionToRead)
                     break;
 
-            	if (DetectValidModbusFrame(readBuffer, (actualPositionToRead < readBuffer.Length) ? actualPositionToRead : readBuffer.Length) | bytesToRead <= actualPositionToRead)
+                if (DetectValidModbusFrame(readBuffer, (actualPositionToRead < readBuffer.Length) ? actualPositionToRead : readBuffer.Length) | bytesToRead <= actualPositionToRead)
                     break;
             }
             while ((DateTime.Now.Ticks - dateTimeLastRead.Ticks) < ticksWait) ;
-            
+
             //10.000 Ticks in 1 ms
 
             receiveData = new byte[actualPositionToRead];
@@ -827,11 +845,13 @@ namespace EasyModbus
             bytesToRead = 0;
 
 
-         
-            
+
+
             dataReceived = true;
             receiveActive = false;
             serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
+            //log.Debug($"DataReceivedHandler: 'serialport.DataReceived' callback is restored (+=) ");
+
             if (ReceiveDataChanged != null)
             {
 
@@ -1259,6 +1279,8 @@ namespace EasyModbus
         /// <returns>Int Array which contains the holding registers</returns>
         public int[] ReadHoldingRegisters(int startingAddress, int quantity)
 		{
+            //log.Debug($"Calling: ReadHoldingRegisters({startingAddress.ToString()},{quantity.ToString()})");
+
             if (debug) StoreLogData.Instance.Store("FC3 (Read Holding Registers from Master device), StartingAddress: "+ startingAddress+", Quantity: " +quantity, System.DateTime.Now);
             transactionIdentifierInternal++;
             if (serialport != null)
@@ -1304,23 +1326,41 @@ namespace EasyModbus
             data[13] = crc[1];
             if (serialport != null)
             {
+                //log.Debug($">> start 'serialport' part");
+
                 dataReceived = false;
                 bytesToRead = 5 + 2 * quantity;
-//                serialport.ReceivedBytesThreshold = bytesToRead;
-                serialport.Write(data, 6, 8);
+                //                serialport.ReceivedBytesThreshold = bytesToRead;
+                //log.Debug("just before 'serialport.Write'");
+                try
+                {
+                    serialport.Write(data, 6, 8);
+                }
+                catch(System.TimeoutException timexp)
+                {
+                    log.Debug($"ReadHoldingRegisters-> serialport.Write => System.TimeoutException occurred");
+                    log.Debug($">>  serialport.Write(data, 6, 8);  -> data buffer length = {data.Length}");
+
+                    // don't retry, restart the COM port
+                    throw (timexp);
+                }
+
+                //log.Debug("just after 'serialport.Write'");
                 if (debug)
                 {
                 	byte [] debugData = new byte[8];
             		Array.Copy(data, 6, debugData, 0, 8);
             		if (debug) StoreLogData.Instance.Store("Send Serial-Data: "+BitConverter.ToString(debugData) ,System.DateTime.Now);          		
                 }
-               if (SendDataChanged != null)
+                //log.Debug("*1*");
+                if (SendDataChanged != null)
             	{
             		sendData = new byte[8];
             		Array.Copy(data, 6, sendData, 0, 8);
             		SendDataChanged(this);
                     
                 }
+                //log.Debug("*2*");
                 data = new byte[2100];
                 readBuffer = new byte[256];
                 
@@ -1330,17 +1370,22 @@ namespace EasyModbus
                 {
                 	while (dataReceived == false & !((DateTime.Now.Ticks - dateTimeSend.Ticks) > TimeSpan.TicksPerMillisecond * this.connectTimeout))
                     	System.Threading.Thread.Sleep(1);  
+
                 	data = new byte[2100];
-                	Array.Copy(readBuffer, 0, data, 6, readBuffer.Length);
-                	
-                	receivedUnitIdentifier = data[6];
+                    Array.Copy(readBuffer, 0, data, 6, readBuffer.Length);
+
+                    
+                    receivedUnitIdentifier = data[6];
+                    //log.Debug("*3*");
                 }
                 if (receivedUnitIdentifier != this.unitIdentifier)
                 	data = new byte[2100];
                 else
                     countRetries = 0;
+
+                //log.Debug($"<< end of 'serialport' part");
             }
-			else if (tcpClient.Client.Connected | udpFlag)
+            else if (tcpClient.Client.Connected | udpFlag)
 			{
                 if (udpFlag)
                 {
@@ -1401,7 +1446,7 @@ namespace EasyModbus
             }
             if (serialport != null)
             {
-            crc = BitConverter.GetBytes(calculateCRC(data, (ushort)(data[8]+3), 6));
+                crc = BitConverter.GetBytes(calculateCRC(data, (ushort)(data[8]+3), 6));
                 if ((crc[0] != data[data[8]+9] | crc[1] != data[data[8]+10])& dataReceived)
                 {
                 	if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
@@ -1427,6 +1472,7 @@ namespace EasyModbus
                     else
                     {
                         countRetries++;
+                        log.Debug($"ReadHoldingRegisters-> retry {countRetries.ToString()} (max {NumberOfRetries.ToString()}, timeOut={this.connectTimeout.ToString()} ms) ");
                         return ReadHoldingRegisters(startingAddress, quantity);
                     }
                     
@@ -2583,8 +2629,13 @@ namespace EasyModbus
 			if (debug) StoreLogData.Instance.Store("Disconnect", System.DateTime.Now);
             if (serialport != null)
             {
-                if (serialport.IsOpen & !this.receiveActive)
+                //if (serialport.IsOpen & !this.receiveActive)
+                if (serialport.IsOpen)
+                {
                     serialport.Close();
+                    Thread.Sleep(250);
+                    log.Debug($"ModbusClient->Disconnect: serialport.IsOpen={serialport.IsOpen}");
+                }
                 if (ConnectedChanged != null)
                     ConnectedChanged(this);
                 return;
@@ -2608,7 +2659,9 @@ namespace EasyModbus
             if (serialport != null)
             {
                 if (serialport.IsOpen)
+                {
                     serialport.Close();
+                }
                 return;
             }
 			if (tcpClient != null & !udpFlag)
