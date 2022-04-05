@@ -32,7 +32,7 @@ namespace EasyModbus
     /// </summary>
     public class ModbusProtocol
     {
-    	public enum ProtocolType { ModbusTCP = 0, ModbusUDP = 1, ModbusRTU = 2};
+        public enum ProtocolType { ModbusTCP = 0, ModbusUDP = 1, ModbusRTU = 2};
         public DateTime timeStamp;
         public bool request;
         public bool response;
@@ -289,7 +289,6 @@ namespace EasyModbus
         private IPEndPoint iPEndPoint;
         private TCPHandler tcpHandler;
         Thread listenerThread;
-        Thread clientConnectionThread;
         private ModbusProtocol[] modbusLogData = new ModbusProtocol[100];
         public bool FunctionCode1Disabled {get; set;}
         public bool FunctionCode2Disabled { get; set; }
@@ -339,10 +338,10 @@ namespace EasyModbus
 
         public void StopListening()
         {
-        	if (SerialFlag & (serialport != null))
-        	{
-        		if (serialport.IsOpen)
-        			serialport.Close();
+            if (SerialFlag & (serialport != null))
+            {
+                if (serialport.IsOpen)
+                    serialport.Close();
                 shouldStop = true;
             }
             try
@@ -353,12 +352,6 @@ namespace EasyModbus
             }
             catch (Exception) { }
             listenerThread.Join();
-            try
-            {
-
-                clientConnectionThread.Abort();
-            }
-            catch (Exception) { }
         }
         
         private void ListenerThread()
@@ -397,8 +390,8 @@ namespace EasyModbus
             else
                while (!shouldStop)
                {
-            	if (udpFlag)
-            	{
+                if (udpFlag)
+                {
                     if (udpClient == null | PortChanged)
                     {
                         udpClient = new UdpClient(port);
@@ -425,12 +418,12 @@ namespace EasyModbus
                     catch (Exception)
                     {                       
                     }    
-            	}
+                }
 
                 }
         }
     
-		#region SerialHandler
+        #region SerialHandler
         private bool dataReceived = false;
         private byte[] readBuffer = new byte[2094];
         private DateTime lastReceive;
@@ -470,9 +463,9 @@ namespace EasyModbus
             else
                 dataReceived = false;
         }
-		#endregion
+        #endregion
  
-		#region Method numberOfClientsChanged
+        #region Method numberOfClientsChanged
         private void numberOfClientsChanged()
         {
             numberOfConnections = tcpHandler.NumberOfConnectedClients;
@@ -805,9 +798,9 @@ namespace EasyModbus
                 Byte[] data;
 
                 if (sendData.exceptionCode > 0)
-                	data = new byte[9 + 2*Convert.ToInt32(serialFlag)];
+                    data = new byte[9 + 2*Convert.ToInt32(serialFlag)];
                 else
-                   	data = new byte[9 + sendData.byteCount+ 2*Convert.ToInt32(serialFlag)];
+                    data = new byte[9 + sendData.byteCount+ 2*Convert.ToInt32(serialFlag)];
               
                 Byte[] byteData = new byte[2];
 
@@ -2045,17 +2038,17 @@ namespace EasyModbus
             }
         }
         
- 		public bool SerialFlag
- 		{
- 			get
- 			{
- 				return serialFlag;
- 			}
- 			set
- 			{
- 				serialFlag = value;
- 			}
- 		}
+        public bool SerialFlag
+        {
+            get
+            {
+                return serialFlag;
+            }
+            set
+            {
+                serialFlag = value;
+            }
+        }
 
         public int Baudrate
         {
