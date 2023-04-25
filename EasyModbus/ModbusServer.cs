@@ -1,19 +1,26 @@
 ﻿/*
- * Copyright (c) 2018 Stefan Roßmann.
- * 
- * This program is free software: you can redistribute it and/or modify  
- * it under the terms of the GNU General Public License as published by  
- * the Free Software Foundation, version 3.
- *
- * This program is distributed in the hope that it will be useful, but 
- * WITHOUT ANY WARRANTY; without even the implied warranty of 
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License 
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- * http://www.rossmann-engineering.de
- */
+Copyright (c) 2018-2020 Rossmann-Engineering
+Permission is hereby granted, free of charge, 
+to any person obtaining a copy of this software
+and associated documentation files (the "Software"),
+to deal in the Software without restriction, 
+including without limitation the rights to use, 
+copy, modify, merge, publish, distribute, sublicense, 
+and/or sell copies of the Software, and to permit 
+persons to whom the Software is furnished to do so, 
+subject to the following conditions:
+
+The above copyright notice and this permission 
+notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
+OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
 
 using System;
 using System.Collections.Generic;
@@ -78,7 +85,7 @@ namespace EasyModbus
         public event NumberOfClientsChanged numberOfClientsChanged;
 
         TcpListener server = null;
-        
+
 
         private List<Client> tcpClientLastRequestList = new List<Client>();
 
@@ -86,19 +93,32 @@ namespace EasyModbus
 
         public string ipAddress = null;
 
+        /// When making a server TCP listen socket, will listen to this IP address.
+        public IPAddress LocalIPAddress {
+            get { return localIPAddress; }
+        }
+        private IPAddress localIPAddress = IPAddress.Any;
+
+        /// <summary>
+        /// Listen to all network interfaces.
+        /// </summary>
+        /// <param name="port">TCP port to listen</param>
         public TCPHandler(int port)
         {
-            IPAddress localAddr = IPAddress.Any;
-            server = new TcpListener(localAddr, port);
+            server = new TcpListener(LocalIPAddress, port);
             server.Start();
             server.BeginAcceptTcpClient(AcceptTcpClientCallback, null);
         }
 
-        public TCPHandler(string ipAddress, int port)
+        /// <summary>
+        /// Listen to a specific network interface.
+        /// </summary>
+        /// <param name="localIPAddress">IP address of network interface to listen</param>
+        /// <param name="port">TCP port to listen</param>
+        public TCPHandler(IPAddress localIPAddress, int port)
         {
-            this.ipAddress = ipAddress;
-            IPAddress localAddr = IPAddress.Any;
-            server = new TcpListener(localAddr, port);
+            this.localIPAddress = localIPAddress;
+            server = new TcpListener(LocalIPAddress, port);
             server.Start();
             server.BeginAcceptTcpClient(AcceptTcpClientCallback, null);
         }
@@ -303,8 +323,17 @@ namespace EasyModbus
         object lockCoils = new object();
         object lockHoldingRegisters = new object();
         private volatile bool shouldStop;
-        
 
+        private IPAddress localIPAddress = IPAddress.Any;
+
+        /// <summary>
+        /// When creating a TCP or UDP socket, the local IP address to attach to.
+        /// </summary>
+        public IPAddress LocalIPAddress
+        {
+            get { return localIPAddress; }
+            set { if (listenerThread == null) localIPAddress = value; }
+        }
 
         public ModbusServer()
         {
@@ -365,9 +394,9 @@ namespace EasyModbus
                         udpClient.Close();
                     }
                     catch (Exception) { }
-                }             
-                tcpHandler = new TCPHandler(port);
-                if (debug) StoreLogData.Instance.Store("EasyModbus Server listing for incomming data at Port " + port, System.DateTime.Now);
+                }
+                tcpHandler = new TCPHandler(LocalIPAddress, port);
+                if (debug) StoreLogData.Instance.Store($"EasyModbus Server listing for incomming data at Port {port}, local IP {LocalIPAddress}", System.DateTime.Now);
                 tcpHandler.dataChanged += new TCPHandler.DataChanged(ProcessReceivedData);
                 tcpHandler.numberOfClientsChanged += new TCPHandler.NumberOfClientsChanged(numberOfClientsChanged);
             }
@@ -394,8 +423,9 @@ namespace EasyModbus
                 {
                     if (udpClient == null | PortChanged)
                     {
-                        udpClient = new UdpClient(port);
-                        if (debug) StoreLogData.Instance.Store("EasyModbus Server listing for incomming data at Port " + port, System.DateTime.Now);
+                        IPEndPoint localEndoint = new IPEndPoint(LocalIPAddress, port);
+                        udpClient = new UdpClient(localEndoint);
+                        if (debug) StoreLogData.Instance.Store($"EasyModbus Server listing for incomming data at Port {port}, local IP {LocalIPAddress}", System.DateTime.Now);
                         udpClient.Client.ReceiveTimeout = 1000;
                         iPEndPoint = new IPEndPoint(IPAddress.Any, port);
                         PortChanged = false;                      
