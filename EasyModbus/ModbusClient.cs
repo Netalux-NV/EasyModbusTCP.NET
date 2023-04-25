@@ -1345,11 +1345,6 @@ namespace EasyModbus
                 {
                     log.Debug($"ReadHoldingRegisters-> serialport.Write => System.TimeoutException occurred");
                     log.Debug($">>  serialport.Write(data, 6, 8);  -> data buffer length = {data.Length}");
-
-                    //// don't retry, restart the COM port
-                    //throw (timexp);
-
-
                     log.Debug($">>  serialport.BytesToRead = {serialport.BytesToRead}");
                     log.Debug($">>  serialport.BytesToWrite = {serialport.BytesToWrite}");
 
@@ -1372,7 +1367,7 @@ namespace EasyModbus
                 {
                     sendData = new byte[8];
                     Array.Copy(data, 6, sendData, 0, 8);
-                    SendDataChanged(this);
+                    SendDataChanged(this);   
                     
                 }
                 //log.Debug("*2*");
@@ -1505,7 +1500,7 @@ namespace EasyModbus
                         }
 
                         countRetries++;
-                        log.Debug($"ReadHoldingRegisters-> retry {countRetries.ToString()} (max {NumberOfRetries.ToString()}, timeOut={this.connectTimeout.ToString()} ms) ");
+                        log.Debug($"ReadHoldingRegisters-> retry {countRetries.ToString()} (Starting Addr{startingAddress}, len: {quantity}) ");
                         //log.Debug($">>  serialport.BytesToRead = {serialport.BytesToRead} / serialport.BytesToWrite = {serialport.BytesToWrite}");
                         return ReadHoldingRegisters(startingAddress, quantity);
                     }
@@ -2107,6 +2102,7 @@ namespace EasyModbus
                     else
                     {
                         countRetries++;
+                        log.Debug($"WriteSingleRegister-> retry {countRetries.ToString()} (Starting Addr{startingAddress}) ");
                         WriteSingleRegister(startingAddress, value);
                     }
                 }
