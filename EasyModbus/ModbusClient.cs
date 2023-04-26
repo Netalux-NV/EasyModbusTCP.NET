@@ -114,10 +114,8 @@ namespace EasyModbus
             serialport.BaudRate = baudRate;
             serialport.Parity = parity;
             serialport.StopBits = stopBits;
-            serialport.WriteTimeout = connectTimeout; // 500; // 10000;
+            serialport.WriteTimeout = connectTimeout;
             serialport.ReadTimeout = connectTimeout;
-            serialport.Handshake = Handshake.None;
-            serialport.DtrEnable = false;
 
             serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);      
         }
@@ -148,10 +146,8 @@ namespace EasyModbus
                     serialport.BaudRate = baudRate;
                     serialport.Parity = parity;
                     serialport.StopBits = stopBits;
-                    serialport.WriteTimeout = connectTimeout; // 500; // 10000;
+                    serialport.WriteTimeout = connectTimeout;
                     serialport.ReadTimeout = connectTimeout;
-                    serialport.Handshake = Handshake.None;
-                    serialport.DtrEnable = false;
                     serialport.Open();
                     connected = true;
                     
@@ -798,12 +794,9 @@ namespace EasyModbus
             int numbytes=0;
             int actualPositionToRead = 0;
             DateTime dateTimeLastRead = DateTime.Now;
-            do
-            {
-                try 
-                {
+            do {
+                try {
                     dateTimeLastRead = DateTime.Now;
-
                     while ((sp.BytesToRead) == 0)
                     {
                         System.Threading.Thread.Sleep(10);
@@ -812,11 +805,13 @@ namespace EasyModbus
                     }
                     numbytes = sp.BytesToRead;
 
+            	
                     byte[] rxbytearray = new byte[numbytes];
                     sp.Read(rxbytearray, 0, numbytes);
                     Array.Copy(rxbytearray,0, readBuffer,actualPositionToRead, (actualPositionToRead + rxbytearray.Length) <= bytesToRead ? rxbytearray.Length : bytesToRead - actualPositionToRead);
 
                     actualPositionToRead = actualPositionToRead + rxbytearray.Length;
+            	
                 }
                 catch (Exception){
 
@@ -837,10 +832,12 @@ namespace EasyModbus
             if (debug) StoreLogData.Instance.Store("Received Serial-Data: "+BitConverter.ToString(readBuffer) ,System.DateTime.Now);
             bytesToRead = 0;
 
+
+         
+            
             dataReceived = true;
             receiveActive = false;
             serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
-
             if (ReceiveDataChanged != null)
             {
 
@@ -866,6 +863,8 @@ namespace EasyModbus
                     return false;
             return true;
         }
+
+
 
         /// <summary>
         /// Read Discrete Inputs from Server device (FC2).
@@ -1527,11 +1526,12 @@ namespace EasyModbus
                         {
                             stats.ReadHoldingStats.NrFails++;
                         }
-
                         countRetries++;
                         log.Debug($"ReadHoldingRegisters-> retry {countRetries.ToString()} (Starting Addr{startingAddress}, len: {quantity}) ");
                         return ReadHoldingRegisters(startingAddress, quantity);
                     }
+                    
+
                 }
             }
             response = new int[quantity];
@@ -1550,6 +1550,7 @@ namespace EasyModbus
             return (response);			
         }
         
+
 
         /// <summary>
         /// Read Input Registers from Master device (FC4).
@@ -1716,7 +1717,6 @@ namespace EasyModbus
                     throw new EasyModbus.Exceptions.ModbusException("error reading");
                 }
             }
-            
             if (serialport != null)
             {
             crc = BitConverter.GetBytes(calculateCRC(data, (ushort)(data[8]+3), 6));

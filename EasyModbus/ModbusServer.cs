@@ -309,6 +309,7 @@ namespace EasyModbus
         private IPEndPoint iPEndPoint;
         private TCPHandler tcpHandler;
         Thread listenerThread;
+        Thread clientConnectionThread;
         private ModbusProtocol[] modbusLogData = new ModbusProtocol[100];
         public bool FunctionCode1Disabled {get; set;}
         public bool FunctionCode2Disabled { get; set; }
@@ -381,6 +382,12 @@ namespace EasyModbus
             }
             catch (Exception) { }
             listenerThread.Join();
+            try
+            {
+
+                clientConnectionThread.Abort();
+            }
+            catch (Exception) { }
         }
         
         private void ListenerThread()
