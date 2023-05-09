@@ -773,7 +773,10 @@ namespace EasyModbus
         private void DataReceivedHandler(object sender,
                         SerialDataReceivedEventArgs e)
         {
-            serialport.DataReceived -= DataReceivedHandler;
+            //serialport.DataReceived -= DataReceivedHandler;
+
+            if (receiveActive)
+                return;
 
             //while (receiveActive | dataReceived)
             //	System.Threading.Thread.Sleep(10);
@@ -787,7 +790,7 @@ namespace EasyModbus
             {
                 sp.DiscardInBuffer();
                 receiveActive = false;
-                serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
+                //serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
                 return;
             }
             readBuffer = new byte[256];
@@ -829,7 +832,7 @@ namespace EasyModbus
 
             receiveData = new byte[actualPositionToRead];
             Array.Copy(readBuffer, 0, receiveData, 0, (actualPositionToRead < readBuffer.Length) ? actualPositionToRead: readBuffer.Length);
-            if (debug) StoreLogData.Instance.Store("Received Serial-Data: "+BitConverter.ToString(readBuffer) ,System.DateTime.Now);
+            if (debug) StoreLogData.Instance.Store("Received Serial-Data: "+BitConverter.ToString(receiveData) ,System.DateTime.Now);
             bytesToRead = 0;
 
 
@@ -837,7 +840,7 @@ namespace EasyModbus
             
             dataReceived = true;
             receiveActive = false;
-            serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
+            //serialport.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
             if (ReceiveDataChanged != null)
             {
 
@@ -1037,6 +1040,7 @@ namespace EasyModbus
                 if ((crc[0] != data[data[8] + 9] | crc[1] != data[data[8] + 10]) & dataReceived)
                 {
                     if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -1262,6 +1266,7 @@ namespace EasyModbus
                 if ((crc[0] != data[data[8]+9] | crc[1] != data[data[8]+10]) & dataReceived)
                 {
                     if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -1482,6 +1487,7 @@ namespace EasyModbus
                 if ((crc[0] != data[data[8]+9] | crc[1] != data[data[8]+10]) & dataReceived)
                 {
                     if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -1713,6 +1719,7 @@ namespace EasyModbus
                 if ((crc[0] != data[data[8]+9] | crc[1] != data[data[8]+10]) & dataReceived)
                 {
                     if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -1944,6 +1951,7 @@ namespace EasyModbus
              if ((crc[0] != data[12] | crc[1] != data[13]) & dataReceived)
              {
                     if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -2053,7 +2061,7 @@ namespace EasyModbus
                     Array.Copy(data, 6, debugData, 0, 8);
                     if (debug) StoreLogData.Instance.Store("Send Serial-Data: "+BitConverter.ToString(debugData) ,System.DateTime.Now);          		
                 }
-               if (SendDataChanged != null)
+                if (SendDataChanged != null)
                 {
                     sendData = new byte[8];
                     Array.Copy(data, 6, sendData, 0, 8);
@@ -2072,7 +2080,9 @@ namespace EasyModbus
                     data = new byte[2100];
                 	Array.Copy(readBuffer, 0, data, 6, readBuffer.Length);
                 	receivedUnitIdentifier = data[6];
+                    if (debug) StoreLogData.Instance.Store($"Trying {receivedUnitIdentifier} != {unitIdentifier} {dataReceived} Serial-Data: " + BitConverter.ToString(readBuffer), System.DateTime.Now);
                 }
+                if (debug) StoreLogData.Instance.Store($"Parsing {receivedUnitIdentifier} != {unitIdentifier} {dataReceived} Serial-Data: " + BitConverter.ToString(readBuffer), System.DateTime.Now);
                 if (receivedUnitIdentifier != this.unitIdentifier)
                     data = new byte[2100];   
                 else
@@ -2150,7 +2160,8 @@ namespace EasyModbus
              crc = BitConverter.GetBytes(calculateCRC(data, 6, 6));           
              if ((crc[0] != data[12] | crc[1] != data[13]) & dataReceived)
              {
-                if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                if (debug) StoreLogData.Instance.Store($"CRCCheckFailedException Throwed {crc[0]} != {data[12]} | {crc[1]} != {data[13]} & {dataReceived}", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -2378,6 +2389,7 @@ namespace EasyModbus
              if ((crc[0] != data[12] | crc[1] != data[13]) & dataReceived)
              {
                 if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -2592,6 +2604,7 @@ namespace EasyModbus
              if ((crc[0] != data[12] | crc[1] != data[13])  &dataReceived)
              {
                 if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
+                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;

@@ -38,12 +38,12 @@ namespace EasyModbus
         public int NrFails { get; set; }
 
         /// <summary>
-        /// Gets the percentage of failed calls.
+        /// Gets the number of failed calls per second.
         /// </summary>
         /// <value>
         /// The failoed percentage.
         /// </value>
-        public double FailsPer100 { get; private set; }
+        public double FailsPerSec { get; private set; }
 
         /// <summary>
         /// Gets the number of calls per sec.
@@ -59,11 +59,10 @@ namespace EasyModbus
         /// <param name="timeSinceLastRecal">The time since last recalculation.</param>
         public void Recalculate(TimeSpan timeSinceLastRecal)
         {
-            int diff = NrCalls - prevCalls;
+            CallsPerSec = (double)(NrCalls - prevCalls) / timeSinceLastRecal.TotalSeconds;
             prevCalls = NrCalls;
-            CallsPerSec = (double)(diff) / timeSinceLastRecal.TotalSeconds;
-            
-            FailsPer100 = (NrFails - prevFails) * 100.0 / diff;
+
+            FailsPerSec = (NrFails - prevFails) / timeSinceLastRecal.TotalSeconds;
             prevFails = NrFails;
         }
     }
