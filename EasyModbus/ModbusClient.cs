@@ -22,9 +22,11 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+using EasyModbus.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.IO.Ports;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
@@ -732,6 +734,11 @@ namespace EasyModbus
 
         private void CleanInBuffers()
         {
+            if(0 < serialport.BytesToRead || bytesToRead != 0)
+            {
+                log.Warn($"CleanInBuffers-> Cleaning buffers. Bytes in serial port buffer={serialport.BytesToRead}. Prev received/toReceive {actualPositionToRead}/{bytesToRead}: {BitConverter.ToString(readBuffer)}");
+            }
+
             bytesToRead = 0;
             receiveData = new byte[256];
             serialport.DiscardInBuffer();
@@ -760,21 +767,21 @@ namespace EasyModbus
 
                             if (n != numbytes)
                             {
-                                log.Warn($"Number of bytes read is ot the same as available bytes. {n} != {numbytes}");
+                                log.Warn($"ReaderThread-> Number of bytes read is not the same as available bytes. {n} != {numbytes}");
                             }
-                            log.Debug($"ReaderThread-> Received part ({numbytes}) {BitConverter.ToString(rxbytearray)}");
+                            log.Debug($"ReaderThread-> Received part ({numbytes}): {BitConverter.ToString(rxbytearray)}");
                             Array.Copy(rxbytearray, 0, readBuffer, actualPositionToRead, (actualPositionToRead + rxbytearray.Length) <= bytesToRead ? rxbytearray.Length : bytesToRead - actualPositionToRead);
                             actualPositionToRead = actualPositionToRead + rxbytearray.Length;
 
                             bool isMsgValid = DetectValidModbusFrame(readBuffer, (actualPositionToRead < readBuffer.Length) ? actualPositionToRead : readBuffer.Length);
-                            log.Debug($"Total bytes received {actualPositionToRead} of {bytesToRead} is valid? {isMsgValid}");
+                            log.Debug($"ReaderThread-> Total bytes received {actualPositionToRead} of {bytesToRead} is valid msg: {isMsgValid}");
                             if ((bytesToRead <= actualPositionToRead) || isMsgValid)
                             {
                                 /* Received correct amount of bytes or received an error msg */
                                 receiveData = new byte[actualPositionToRead];
                                 Array.Copy(readBuffer, 0, receiveData, 0, (actualPositionToRead < readBuffer.Length) ? actualPositionToRead : readBuffer.Length);
 
-                                log.Debug($"ReaderThread-> Received complete Serial-Data ({actualPositionToRead}): " + BitConverter.ToString(receiveData));
+                                log.Debug($"ReaderThread-> Received complete Serial-Data ({actualPositionToRead}): {BitConverter.ToString(receiveData)}");
 
                                 bytesToRead = 0;
                                 dataReceived = true;
@@ -1437,17 +1444,21 @@ namespace EasyModbus
                         sw_delay.SpinOnce();
 
                     data = new byte[2100];
-                    Array.Copy(receiveData, 0, data, 6, receiveData.Length);
-
-                    receivedUnitIdentifier = data[6];
-                    log.Debug($"ReadHoldingRegisters-> Trying {receivedUnitIdentifier:X} != {unitIdentifier:X} {dataReceived} Serial-Data: ({receiveData.Length})" + BitConverter.ToString(receiveData));
+                    if (dataReceived == true)
+                    {
+                        Array.Copy(receiveData, 0, data, 6, receiveData.Length);
+                        receivedUnitIdentifier = data[6];
+                    }
+                    else
+                    {
+                        log.Warn("ReadHoldingRegisters-> No Correct message received.");
+                    }
                 }
-                if (receivedUnitIdentifier != this.unitIdentifier)
+                if (dataReceived && receivedUnitIdentifier != this.unitIdentifier)
                 {
                     log.Warn($"ReadHoldingRegisters-> Received identifier NOT the same as the one expected. {receivedUnitIdentifier} != {unitIdentifier}. dataReceived = {dataReceived} ({receiveData.Length}/{5 + 2 * quantity})" + BitConverter.ToString(receiveData));
-                    data = new byte[2100];
                 }
-                else
+                else if(dataReceived)
                 {
                     countRetries = 0;
                 }
@@ -1554,7 +1565,7 @@ namespace EasyModbus
                 }
                 else if (!dataReceived)
                 {
-                    log.Warn($"ReadHoldingRegisters-> TimeoutException Throwed. {receiveData[0]:X} != {unitIdentifier:X}. dataReceived = {dataReceived} ({receiveData.Length}/{5 + 2 * quantity})" + BitConverter.ToString(receiveData));
+                    log.Warn($"ReadHoldingRegisters-> TimeoutException Throwed. dataReceived = {dataReceived}");
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -2105,21 +2116,25 @@ namespace EasyModbus
                     while (dataReceived == false & !((DateTime.Now.Ticks - dateTimeSend.Ticks) > TimeSpan.TicksPerMillisecond * this.connectTimeout))
                         sw_delay.SpinOnce();
 
+
                     data = new byte[2100];
-                    Array.Copy(receiveData, 0, data, 6, receiveData.Length);
-                    receivedUnitIdentifier = data[6];
-                    if (debug) StoreLogData.Instance.Store($"Trying {receivedUnitIdentifier} != {unitIdentifier} {dataReceived} Serial-Data: " + BitConverter.ToString(receiveData), System.DateTime.Now);
-                    log.Debug($"WriteSingleRegister-> Trying {receivedUnitIdentifier} != {unitIdentifier} {dataReceived} Serial-Data: " + BitConverter.ToString(receiveData));
+                    if (dataReceived == true)
+                    {
+                        Array.Copy(receiveData, 0, data, 6, receiveData.Length);
+                        receivedUnitIdentifier = data[6];
+                    }
+                    else
+                    {
+                        log.Warn("WriteSingleRegister-> No Correct message received.");
+                    }
                 }
-                if (debug) StoreLogData.Instance.Store($"Parsing {receivedUnitIdentifier} != {unitIdentifier} {dataReceived} Serial-Data: " + BitConverter.ToString(receiveData), System.DateTime.Now);
-                if (receivedUnitIdentifier != this.unitIdentifier)
+
+                if (dataReceived && receivedUnitIdentifier != this.unitIdentifier)
                 {
-                    log.Warn($"WriteSingleRegister-> Received identifier NOT the same as the one expected. {receivedUnitIdentifier} != {unitIdentifier}. dataReceived = {dataReceived}.");
-                    data = new byte[2100];
+                    log.Warn($"WriteSingleRegister-> Received identifier NOT the same as the one expected. {receivedUnitIdentifier} != {unitIdentifier}. dataReceived = {dataReceived} ({receiveData.Length}/8)" + BitConverter.ToString(receiveData));
                 }
-                else
+                else if (dataReceived)
                 {
-                    log.Debug($"WriteSingleRegister-> Received identifier the same as the one expected. {receivedUnitIdentifier} != {unitIdentifier}");
                     countRetries = 0;
                 }
             }
@@ -2228,8 +2243,7 @@ namespace EasyModbus
                 }
                 else if (!dataReceived)
                 {
-                    if (debug) StoreLogData.Instance.Store("TimeoutException Throwed", System.DateTime.Now);
-                    log.Warn("WriteSingleRegister-> TimeoutException Throwed");
+                    log.Warn($"WriteSingleRegister-> TimeoutException Throwed. dataReceived = {dataReceived}");
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -2482,22 +2496,19 @@ namespace EasyModbus
         /// <param name="values">register Values to be written</param>
         public void WriteMultipleRegisters(int startingAddress, int[] values)
         {
-            string debugString = "";
-            for (int i = 0; i < values.Length; i++)
-                debugString = debugString + values[i] + " ";
-            if (debug) StoreLogData.Instance.Store("FC16 (Write multiple Registers to Server device), StartingAddress: " + startingAddress + ", Values: " + debugString, System.DateTime.Now);
+            log.Debug($"WriteMultipleRegisters (FC16)-> Write multiple Registers to device, StartingAddress: {startingAddress}, Values: " + string.Join(", ", values.Select(b => b.ToString("X2"))));
             transactionIdentifierInternal++;
             byte byteCount = (byte)(values.Length * 2);
             byte[] quantityOfOutputs = BitConverter.GetBytes((int)values.Length);
             if (serialport != null)
                 if (!serialport.IsOpen)
                 {
-                    if (debug) StoreLogData.Instance.Store("SerialPortNotOpenedException Throwed", System.DateTime.Now);
+                    log.Error("WriteMultipleRegisters-> SerialPortNotOpenedException Throwed: serial port not opened");
                     throw new EasyModbus.Exceptions.SerialPortNotOpenedException("serial port not opened");
                 }
             if (tcpClient == null & !udpFlag & serialport == null)
             {
-                if (debug) StoreLogData.Instance.Store("ConnectionException Throwed", System.DateTime.Now);
+                log.Error("WriteMultipleRegisters-> ConnectionException Throwed: connection error");
                 throw new EasyModbus.Exceptions.ConnectionException("connection error");
             }
             this.transactionIdentifier = BitConverter.GetBytes((uint)transactionIdentifierInternal);
@@ -2536,16 +2547,17 @@ namespace EasyModbus
                     stats.WriteMultiRegsStats.NrCalls++;
                 }
 
+                CleanInBuffers();
                 dataReceived = false;
                 bytesToRead = 8;
-                receiveData = new byte[256];
                 serialport.Write(data, 6, data.Length - 6);
+                log.Debug("WriteMultipleRegisters-> Send Serial-Data: " + BitConverter.ToString(data, 6, data.Length - 6));               
 
                 if (debug)
                 {
                     byte[] debugData = new byte[data.Length - 6];
                     Array.Copy(data, 6, debugData, 0, data.Length - 6);
-                    if (debug) StoreLogData.Instance.Store("Send Serial-Data: " + BitConverter.ToString(debugData), System.DateTime.Now);
+                    log.Debug("WriteMultipleRegisters-> Send Serial-Data: " + BitConverter.ToString(debugData));
                 }
                 if (SendDataChanged != null)
                 {
@@ -2563,13 +2575,24 @@ namespace EasyModbus
                         sw_delay.SpinOnce();
 
                     data = new byte[2100];
-                    Array.Copy(receiveData, 0, data, 6, receiveData.Length);
-                    receivedUnitIdentifier = data[6];
+                    if (dataReceived == true)
+                    {
+                        Array.Copy(receiveData, 0, data, 6, receiveData.Length);
+                        receivedUnitIdentifier = data[6];
+                    }
+                    else
+                    {
+                        log.Warn("WriteMultipleRegisters-> No Correct message received.");
+                    }
                 }
-                if (receivedUnitIdentifier != this.unitIdentifier)
-                    data = new byte[2100];
-                else
+                if (dataReceived && receivedUnitIdentifier != this.unitIdentifier)
+                {
+                    log.Warn($"WriteMultipleRegisters-> Received identifier NOT the same as the one expected. {receivedUnitIdentifier} != {unitIdentifier}. dataReceived = {dataReceived} ({receiveData.Length}/8)" + BitConverter.ToString(receiveData));
+                }
+                else if (dataReceived)
+                {
                     countRetries = 0;
+                }
             }
             else if (tcpClient.Client.Connected | udpFlag)
             {
@@ -2618,22 +2641,22 @@ namespace EasyModbus
 
                 if (data[8] == 0x01)
                 {
-                    if (debug) StoreLogData.Instance.Store("FunctionCodeNotSupportedException Throwed", System.DateTime.Now);
+                    log.Error("WriteMultipleRegisters-> FunctionCodeNotSupportedException Throwed: Function code not supported by master");
                     throw new EasyModbus.Exceptions.FunctionCodeNotSupportedException("Function code not supported by master");
                 }
                 if (data[8] == 0x02)
                 {
-                    if (debug) StoreLogData.Instance.Store("StartingAddressInvalidException Throwed", System.DateTime.Now);
+                    log.Error("WriteMultipleRegisters-> StartingAddressInvalidException Throwed: Starting address invalid or starting address + quantity invalid");
                     throw new EasyModbus.Exceptions.StartingAddressInvalidException("Starting address invalid or starting address + quantity invalid");
                 }
                 if (data[8] == 0x03)
                 {
-                    if (debug) StoreLogData.Instance.Store("QuantityInvalidException Throwed", System.DateTime.Now);
+                    log.Error("WriteMultipleRegisters-> QuantityInvalidException Throwed: quantity invalid");
                     throw new EasyModbus.Exceptions.QuantityInvalidException("quantity invalid");
                 }
                 if (data[8] == 0x04)
                 {
-                    if (debug) StoreLogData.Instance.Store("ModbusException Throwed", System.DateTime.Now);
+                    log.Error("WriteMultipleRegisters-> ModbusException Throwed: error reading");
                     throw new EasyModbus.Exceptions.ModbusException("error reading");
                 }
             }
@@ -2642,8 +2665,7 @@ namespace EasyModbus
                 crc = BitConverter.GetBytes(calculateCRC(data, 6, 6));
                 if ((crc[0] != data[12] | crc[1] != data[13]) & dataReceived)
                 {
-                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Throwed", System.DateTime.Now);
-                    if (debug) StoreLogData.Instance.Store("CRCCheckFailedException Serial-Data: " + BitConverter.ToString(data), System.DateTime.Now);
+                    log.Warn("WriteMultipleRegisters-> CRCCheckFailed Serial - Data: " + BitConverter.ToString(data));
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -2651,6 +2673,7 @@ namespace EasyModbus
                         {
                             stats.WriteMultiRegsStats.NrFails++;
                         }
+                        log.Error("WriteMultipleRegisters-> CRCCheckFailedException trowed: Response CRC check failed");
                         throw new EasyModbus.Exceptions.CRCCheckFailedException("Response CRC check failed");
                     }
                     else
@@ -2665,7 +2688,7 @@ namespace EasyModbus
                 }
                 else if (!dataReceived)
                 {
-                    if (debug) StoreLogData.Instance.Store("TimeoutException Throwed", System.DateTime.Now);
+                    log.Warn($"WriteMultipleRegisters-> TimeoutException Throwed. dataReceived = {dataReceived}");
                     if (NumberOfRetries <= countRetries)
                     {
                         countRetries = 0;
@@ -2673,7 +2696,7 @@ namespace EasyModbus
                         {
                             stats.WriteMultiRegsStats.NrFails++;
                         }
-                        throw new TimeoutException("No Response from Modbus Slave");
+                        log.Error("WriteMultipleRegisters-> TimeoutException Throwed: No Response from Modbus Slave");
                     }
                     else
                     {
@@ -2682,6 +2705,7 @@ namespace EasyModbus
                         {
                             stats.WriteMultiRegsStats.NrFails++;
                         }
+                        log.Info($"WriteMultipleRegisters-> retry {countRetries} (Starting Addr{startingAddress})");
                         WriteMultipleRegisters(startingAddress, values);
                     }
                 }

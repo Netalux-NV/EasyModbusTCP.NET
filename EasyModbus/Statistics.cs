@@ -62,7 +62,7 @@ namespace EasyModbus
             CallsPerSec = (double)(NrCalls - prevCalls) / timeSinceLastRecal.TotalSeconds;
             prevCalls = NrCalls;
 
-            FailsPerSec = (NrFails - prevFails) / timeSinceLastRecal.TotalSeconds;
+            FailsPerSec = (double)(NrFails - prevFails) / timeSinceLastRecal.TotalSeconds;
             prevFails = NrFails;
         }
     }
