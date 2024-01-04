@@ -1599,7 +1599,7 @@ namespace EasyModbus
                 data[9 + i * 2] = lowByte;
                 data[9 + i * 2 + 1] = highByte;
 
-                response[i] = BitConverter.ToInt16(data, (9 + i * 2));
+                response[i] = BitConverter.ToUInt16(data, (9 + i * 2));
             }
             return (response);
         }
@@ -1823,7 +1823,7 @@ namespace EasyModbus
                 data[9 + i * 2] = lowByte;
                 data[9 + i * 2 + 1] = highByte;
 
-                response[i] = BitConverter.ToInt16(data, (9 + i * 2));
+                response[i] = BitConverter.ToUInt16(data, (9 + i * 2));
             }
             return (response);
         }
@@ -2904,7 +2904,7 @@ namespace EasyModbus
                 data[9 + i * 2] = lowByte;
                 data[9 + i * 2 + 1] = highByte;
 
-                response[i] = BitConverter.ToInt16(data, (9 + i * 2));
+                response[i] = BitConverter.ToUInt16(data, (9 + i * 2));
             }
             return (response);
         }
